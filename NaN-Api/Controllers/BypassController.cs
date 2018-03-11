@@ -30,12 +30,14 @@ namespace NaN_Api.Controllers
             List<Task> tasks = new List<Task>();
             var convertStatus = new Dictionary<int, bool>();
             var convertHelperClass = new Converter();
-            for (int i = 0; i < list.Count; i++)
+            try
             {
-                if (!list[i].IsConverted)
+
+                for (int i = 0; i < list.Count; ++i)
                 {
+                    if (list[i].IsConverted) continue;
                     var index = i;
-                    tasks.Add(Task.Factory.StartNew(() =>
+                    tasks.Add(Task.Run(() =>
                     {
                         convertHelperClass.Convert(list[index], 10, out var errorStatus, out var linkOut);
                         convertStatus.Add(index, errorStatus);
@@ -45,10 +47,13 @@ namespace NaN_Api.Controllers
                         }
                     }));
                 }
+                Task.WaitAll(tasks.ToArray());
+                //          Console.WriteLine(convertStatus.ToString()); // debug
             }
-
-            Task.WaitAll(tasks.ToArray());
-//          Console.WriteLine(convertStatus.ToString()); // debug
+            catch (Exception e)
+            {
+                Console.WriteLine($"{e}\nMessage : {e.Message}");
+            }
             return list;
         }
     }

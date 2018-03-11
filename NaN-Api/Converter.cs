@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
@@ -13,9 +15,40 @@ namespace NaN_Api
 {
     public class Converter
     {
+//        private static readonly HttpClientHandler Handler = new HttpClientHandler()
+//        {
+//            UseProxy = false,
+//            Proxy = null,
+//            PreAuthenticate = true,
+//            UseDefaultCredentials = false,
+//            MaxAutomaticRedirections = 4,
+//            MaxRequestContentBufferSize = Int32.MaxValue,
+//        };
+
+        private static readonly HttpClient Connection = new HttpClient();
+
+        public Converter()
+        {
+            #region Connection Configuration
+
+            //set Connection SPM
+            ServicePointManager.DefaultConnectionLimit = 200;
+            ServicePointManager.Expect100Continue = false;
+            ServicePointManager.SecurityProtocol =
+                SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+//            //set Accept headers for HttpClient
+//            Connection.DefaultRequestHeaders.TryAddWithoutValidation("Accept",
+//                "text/html,application/xhtml+xml,application/xml,application/json");
+//            //set User agent for HttpClient
+//            Connection.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+//                "Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; EN; rv:11.0) like Gecko");
+//            Connection.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Charset", "ISO-8859-1");
+
+            #endregion
+        }
+
         public void Convert(Link link, int maxHops, out bool ConvertErr, out Link linkOut)
         {
-            ServicePointManager.DefaultConnectionLimit = 100;
             string parsedURL = "undecided";
             bool convertURLstatus = false;
             linkOut = link;
@@ -34,21 +67,30 @@ namespace NaN_Api
                     switch (adType)
                     {
                         case 1:
-                            using (var client = new WebClientExtended())
+                            using (var response = Connection.GetAsync(link.Url).Result)
                             {
-                                var html = client.DownloadString(link.Url);
+                                var contentBytes = response.Content.ReadAsByteArrayAsync().Result; //sync call
+                                var content = Encoding.UTF8.GetString(response.Content.ReadAsByteArrayAsync().Result, 0,
+                                    contentBytes.Length);
+                                if (content[0] == '\uFEFF')
+                                {
+                                    content = content.Substring(1);
+                                }
+
                                 string realLink = "";
-                                isShortLink(client.ResponseUri.ToString(), out var dummyStatus, out var dummy2);
+                                response.EnsureSuccessStatusCode();
+                                string responseUri = response.RequestMessage.RequestUri.ToString();
+                                isShortLink(responseUri, out var dummyStatus, out var dummy2);
                                 if (!dummyStatus)
                                 {
-                                    realLink = client.ResponseUri.ToString();
+                                    realLink = responseUri;
                                     parsedURL = realLink;
                                     convertURLstatus = true;
                                     break;
                                 }
 
                                 var parser = new HtmlParser();
-                                var doc = parser.Parse(html);
+                                var doc = parser.Parse(content);
                                 var node = doc.QuerySelectorAll("a").Where(x => x.HasAttribute("href"));
                                 foreach (var nodeLink in node)
                                 {
@@ -77,39 +119,49 @@ namespace NaN_Api
 
                             break;
                         case 2:
-                            using (var client = new WebClientExtended())
+                            var decryptLink = "";
+                            try
                             {
-                                string html = "";
-
-                                //this is the important bit...
-                                client.Headers.Add("User-Agent",
-                                    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.0.4) Gecko/20060508 Firefox/1.5.0.4");
-                                client.Headers.Add("Accept-Language", "en-us,en;q=0.5");
-                                //end of the important bit...
-                                
-                                var parser = new HtmlParser();
                                 Uri decryptParam = new Uri(link.Url);
                                 string decryptLinkParamid = "";
-                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("id")!=null)
+                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("id") != null)
                                 {
                                     decryptLinkParamid = HttpUtility.ParseQueryString(decryptParam.Query).Get("id");
                                 }
+
                                 string decryptLinkParamc = "";
-                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("c")!=null)
+                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("c") != null)
                                 {
                                     decryptLinkParamc = HttpUtility.ParseQueryString(decryptParam.Query).Get("c");
                                 }
+
                                 string decryptLinkParamuser = "";
                                 if (HttpUtility.ParseQueryString(decryptParam.Query).Get("user") != null)
                                 {
-
                                     decryptLinkParamuser = HttpUtility.ParseQueryString(decryptParam.Query).Get("user");
                                 }
 
-                                var decryptLink =$"http://decrypt.safelinkconverter.com/index.php?id={decryptLinkParamid}&c={decryptLinkParamc}&user={decryptLinkParamuser}&pop=0";
-                                var decryptHtml = client.DownloadString(new Uri(decryptLink));
+                                decryptLink =
+                                    $"http://decrypt.safelinkconverter.com/index.php?id={decryptLinkParamid}&c={decryptLinkParamc}&user={decryptLinkParamuser}&pop=0";
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine($"Error on case 2 : decryptLink\n{e.Message}");
+                                break;
+                            }
 
-                                var decryptdoc = parser.Parse(decryptHtml);
+                            using (var response = Connection.GetAsync(decryptLink).Result)
+                            {
+                                var parser = new HtmlParser();
+                                var contentBytes = response.Content.ReadAsByteArrayAsync().Result; //sync call
+                                var content = Encoding.UTF8.GetString(response.Content.ReadAsByteArrayAsync().Result, 0,
+                                    contentBytes.Length);
+                                if (content[0] == '\uFEFF')
+                                {
+                                    content = content.Substring(1);
+                                }
+
+                                var decryptdoc = parser.Parse(content);
                                 var decryptedText =
                                     Regex.Replace(
                                         decryptdoc.QuerySelector("div[class^='redirect_url'] div").TextContent,
@@ -131,11 +183,18 @@ namespace NaN_Api
                             break;
                         case 3:
                         case 4:
-                            using (var client = new WebClientExtended())
+                            using (var response = Connection.GetAsync(link.Url).Result)
                             {
-                                var html = client.DownloadString(link.Url);
+                                var contentBytes = response.Content.ReadAsByteArrayAsync().Result; //sync call
+                                var content = Encoding.UTF8.GetString(response.Content.ReadAsByteArrayAsync().Result, 0,
+                                    contentBytes.Length);
+                                if (content[0] == '\uFEFF')
+                                {
+                                    content = content.Substring(1);
+                                }
+
                                 var parser = new HtmlParser();
-                                var doc = parser.Parse(html);
+                                var doc = parser.ParseAsync(content).Result;
                                 string realLink = "";
                                 var node = doc.QuerySelectorAll("div[class^='iklan'] a")
                                     .Where(x => x.HasAttribute("href"));
@@ -155,13 +214,21 @@ namespace NaN_Api
                                     parsedURL = result[1].Value;
                                 }*/
                             }
+
                             break;
                         case 5:
-                            using (var client = new WebClientExtended())
+                            using (var response = Connection.GetAsync(link.Url).Result)
                             {
-                                var html = client.DownloadString(link.Url);
+                                var contentBytes = response.Content.ReadAsByteArrayAsync().Result; //sync call
+                                var content = Encoding.UTF8.GetString(response.Content.ReadAsByteArrayAsync().Result, 0,
+                                    contentBytes.Length);
+                                if (content[0] == '\uFEFF')
+                                {
+                                    content = content.Substring(1);
+                                }
+
                                 var pattern = "\\?(.*)";
-                                var result = Regex.Matches(html, pattern);
+                                var result = Regex.Matches(content, pattern);
                                 if (result.Count >= 1)
                                 {
                                     var decoded = Base64UrlEncoder.Decode(result[0].Value);
@@ -178,11 +245,18 @@ namespace NaN_Api
                             //                parsedURL = string(decoded)         
                             break;
                         case 6:
-                            using (var client = new WebClientExtended())
+                            using (var response = Connection.GetAsync(link.Url).Result)
                             {
-                                var html = client.DownloadString(link.Url);
+                                var contentBytes = response.Content.ReadAsByteArrayAsync().Result; //sync call
+                                var content = Encoding.UTF8.GetString(response.Content.ReadAsByteArrayAsync().Result, 0,
+                                    contentBytes.Length);
+                                if (content[0] == '\uFEFF')
+                                {
+                                    content = content.Substring(1);
+                                }
+
                                 var pattern = "decode\\(\"(.+?)\"\\)";
-                                var result = Regex.Matches(html, pattern);
+                                var result = Regex.Matches(content, pattern);
                                 if (result.Count >= 1)
                                 {
                                     var toDecode = result[0].Value.Replace("decode(\"", "").Replace("\")", "");
@@ -201,17 +275,24 @@ namespace NaN_Api
                             //                parsedURL = string(decoded)
                             break;
                         case 7:
-                            using (var client = new WebClientExtended())
+                            using (var response = Connection.GetAsync(link.Url).Result)
                             {
-                                var html = client.DownloadString(link.Url);
+                                var contentBytes = response.Content.ReadAsByteArrayAsync().Result; //sync call
+                                var content = Encoding.UTF8.GetString(response.Content.ReadAsByteArrayAsync().Result, 0,
+                                    contentBytes.Length);
+                                if (content[0] == '\uFEFF')
+                                {
+                                    content = content.Substring(1);
+                                }
+
                                 var parser = new HtmlParser();
-                                var doc = parser.Parse(html);
+                                var doc = parser.ParseAsync(content).Result;
                                 string realLink = "";
                                 var node = doc.QuerySelectorAll("script");
                                 foreach (var jsElement in node)
                                 {
                                     string toRegex = jsElement.InnerHtml;
-                                    if (Regex.IsMatch(toRegex, "link", RegexOptions.IgnoreCase))
+                                    if (toRegex.Contains("link-content"))
                                     {
                                         var match = Regex.Matches(toRegex, "\"(.+?)\"");
                                         foreach (var matchElement in match)

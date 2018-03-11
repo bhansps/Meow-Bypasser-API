@@ -33,7 +33,6 @@ namespace NaN_Api
             {
                 app.UseDeveloperExceptionPage();
             }
-
             app.UseMvc();
         }
     }

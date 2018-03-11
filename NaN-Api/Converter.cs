@@ -15,6 +15,7 @@ namespace NaN_Api
     {
         public void Convert(Link link, int maxHops, out bool ConvertErr, out Link linkOut)
         {
+            ServicePointManager.DefaultConnectionLimit = 100;
             string parsedURL = "undecided";
             bool convertURLstatus = false;
             linkOut = link;
@@ -85,46 +86,28 @@ namespace NaN_Api
                                     "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.0.4) Gecko/20060508 Firefox/1.5.0.4");
                                 client.Headers.Add("Accept-Language", "en-us,en;q=0.5");
                                 //end of the important bit...
-
-                                #region HTTPS -> HTTP Unsecure Hacks
-
-                                // BEWARE : Bad code in this region
-                                try
-                                {
-                                    html = client.DownloadString(new Uri(link.Url));
-                                }
-                                catch (WebException e)
-                                {
-                                    var location = e.Response.Headers.GetValues("Location");
-                                    if (location != null) html = client.DownloadString(new Uri(location[0]));
-                                }
-
+                                
                                 var parser = new HtmlParser();
-                                var doc = parser.Parse(html);
-                                var node = doc.QuerySelectorAll("a").Where(x => x.HasAttribute("href"));
-                                string realLink = "";
-                                string decryptLink = "";
-                                foreach (var nodeLink in node)
+                                Uri decryptParam = new Uri(link.Url);
+                                string decryptLinkParamid = "";
+                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("id")!=null)
                                 {
-                                    if (nodeLink.Attributes.GetNamedItem("href").Value.Contains("?id="))
-                                    {
-                                        Uri decryptParam = new Uri(nodeLink.Attributes.GetNamedItem("href").Value);
-                                        string decryptLinkParamid =
-                                            HttpUtility.ParseQueryString(decryptParam.Query).Get("id");
-                                        string decryptLinkParamc =
-                                            HttpUtility.ParseQueryString(decryptParam.Query).Get("c");
-                                        string decryptLinkParamuser =
-                                            HttpUtility.ParseQueryString(decryptParam.Query).Get("user");
-                                        decryptLink =
-                                            $"http://decrypt.safelinkconverter.com/index.php?id={decryptLinkParamid}&c={decryptLinkParamc}&user={decryptLinkParamuser}&pop=0";
-                                        break;
-                                    }
+                                    decryptLinkParamid = HttpUtility.ParseQueryString(decryptParam.Query).Get("id");
+                                }
+                                string decryptLinkParamc = "";
+                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("c")!=null)
+                                {
+                                    decryptLinkParamc = HttpUtility.ParseQueryString(decryptParam.Query).Get("c");
+                                }
+                                string decryptLinkParamuser = "";
+                                if (HttpUtility.ParseQueryString(decryptParam.Query).Get("user") != null)
+                                {
+
+                                    decryptLinkParamuser = HttpUtility.ParseQueryString(decryptParam.Query).Get("user");
                                 }
 
-
+                                var decryptLink =$"http://decrypt.safelinkconverter.com/index.php?id={decryptLinkParamid}&c={decryptLinkParamc}&user={decryptLinkParamuser}&pop=0";
                                 var decryptHtml = client.DownloadString(new Uri(decryptLink));
-
-                                #endregion
 
                                 var decryptdoc = parser.Parse(decryptHtml);
                                 var decryptedText =
@@ -172,19 +155,6 @@ namespace NaN_Api
                                     parsedURL = result[1].Value;
                                 }*/
                             }
-
-                            //                        r, _:= regexp.Compile("<center.*href=\"(.+?)?\"")
-                            //                        resp, err:= http.Get(url); if err == nil{
-                            //                        body, _:= ioutil.ReadAll(resp.Body)
-                            //                        regexArrays:= r.FindStringSubmatch(string(body))[1]
-                            //                        if s.Contains(string(body), "awsubs"){
-                            //                            parsedURL = regexArrays
-                            //                        }
-                            //                        else
-                            //                        {
-                            //                            parsedURL = url
-                            //                        }
-                            //                    }
                             break;
                         case 5:
                             using (var client = new WebClientExtended())
@@ -274,28 +244,6 @@ namespace NaN_Api
                     ConvertErr = true;
                     return;
                 }
-
-                //                }
-                //                // fmt.Println(parsedURL) //Debugging
-                //
-                //                if cond, _:= isShortLink(parsedURL); cond && shortlinkErrHandler{
-                //                    bypass(parsedURL, i, chURL, chNum)
-                //       
-                //        }else{
-                //                    url = parsedURL
-                //   
-                //            chURL < -url
-                //   
-                //            chNum < -i
-                //   
-                //        }
-                //            }else{
-                //                chURL < -url
-                //   
-                //        chNum < -i
-                //    }
-                //
-                //        }
             }
 
             isShortLink(parsedURL, out var parsedStatus, out adType);

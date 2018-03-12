@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Rewrite.Internal;
 
-namespace NaN_Api
+namespace Meow_Api
 {
     public class Link
     {

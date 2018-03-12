@@ -8,7 +8,7 @@ using AngleSharp.Dom.Css;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 
-namespace NaN_Api.Controllers
+namespace Meow_Api.Controllers
 {
     [Route("[controller]")]
     public class BypassController : Controller

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 // For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
-namespace NaN_Api.Controllers
+namespace Meow_Api.Controllers
 {
     [Route("")]
     public class HomeController : Controller

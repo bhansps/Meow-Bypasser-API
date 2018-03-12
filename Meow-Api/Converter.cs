@@ -11,7 +11,7 @@ using System.Web;
 using AngleSharp.Parser.Html;
 using Microsoft.IdentityModel.Tokens;
 
-namespace NaN_Api
+namespace Meow_Api
 {
     public class Converter
     {

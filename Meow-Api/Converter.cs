@@ -6,25 +6,21 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using AngleSharp;
+using AngleSharp.Dom.Html;
+using AngleSharp.Extensions;
+using AngleSharp.Network.Default;
 using AngleSharp.Parser.Html;
 using Microsoft.IdentityModel.Tokens;
+
 
 namespace Meow_Api
 {
     public class Converter
     {
-//        private static readonly HttpClientHandler Handler = new HttpClientHandler()
-//        {
-//            UseProxy = false,
-//            Proxy = null,
-//            PreAuthenticate = true,
-//            UseDefaultCredentials = false,
-//            MaxAutomaticRedirections = 4,
-//            MaxRequestContentBufferSize = Int32.MaxValue,
-//        };
-
         private static readonly HttpClient Connection = new HttpClient();
 
         public Converter()
@@ -37,12 +33,12 @@ namespace Meow_Api
             ServicePointManager.SecurityProtocol =
                 SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 //            //set Accept headers for HttpClient
-//            Connection.DefaultRequestHeaders.TryAddWithoutValidation("Accept",
-//                "text/html,application/xhtml+xml,application/xml,application/json");
+            Connection.DefaultRequestHeaders.TryAddWithoutValidation("Accept",
+                "text/html,application/xhtml+xml,application/xml,application/json");
 //            //set User agent for HttpClient
-//            Connection.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
-//                "Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; EN; rv:11.0) like Gecko");
-//            Connection.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Charset", "ISO-8859-1");
+            Connection.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; EN; rv:11.0) like Gecko");
+            Connection.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Charset", "ISO-8859-1");
 
             #endregion
         }
@@ -105,18 +101,7 @@ namespace Meow_Api
                                 var decoded = Base64UrlEncoder.Decode(realLink);
                                 parsedURL = decoded;
                                 convertURLstatus = true;
-
-                                /* Regex Match Pattern from Nyan-API (GoLang) -> r, _:= regexp.Compile("\\?r=(.+?)?\"");
-                                var pattern = "\\?r=(.+?)?\"";
-                                var result = Regex.Matches(html, pattern);
-                                if (result.Count >= 1)
-                                {
-                                    var decoded = Base64UrlEncoder.Decode(result[0].Value);
-                                    parsedURL = decoded;
-                                    convertURLstatus = true;
-                                } */
                             }
-
                             break;
                         case 2:
                             var decryptLink = "";
@@ -169,17 +154,7 @@ namespace Meow_Api
 
                                 parsedURL = decryptedText;
                                 convertURLstatus = true;
-                                /* Regex Match Pattern from Nyan-API (GoLang) -> r, _:= regexp.Compile("\\?id=(.+?)?&");
-                                var pattern = "\\?id=(.+?)?&";
-                                var result = Regex.Matches(html, pattern);
-                                if (result.Count >= 1)
-                                {
-                                    var decoded = Base64UrlEncoder.Decode(result[0].Value);
-                                    parsedURL = decoded;
-                                    convertURLstatus = true;
-                                }*/
                             }
-
                             break;
                         case 3:
                         case 4:
@@ -206,15 +181,7 @@ namespace Meow_Api
 
                                 parsedURL = realLink;
                                 convertURLstatus = true;
-                                /*Regex Match Pattern from Nyan-API (GoLang) -> r, _:= regexp.Compile("<center.*href=\"(.+?)?\"");
-                                var pattern = "<center.*href=\"(.+?)?\"";
-                                var result = Regex.Matches(html, pattern);
-                                if (result.Count >= 1 && result[1].Value.Contains("awsubs"))
-                                {
-                                    parsedURL = result[1].Value;
-                                }*/
                             }
-
                             break;
                         case 5:
                             using (var response = Connection.GetAsync(link.Url).Result)
@@ -235,14 +202,7 @@ namespace Meow_Api
                                     parsedURL = decoded;
                                     convertURLstatus = true;
                                 }
-                            }
-
-                            //                    r, _:= regexp.Compile("\\?(.*)")
-                            //       
-                            //            if b64String := r.FindStringSubmatch(url); len(b64String) > 1 {
-                            //                        decoded, _:= b64.StdEncoding.DecodeString(b64String[1])
-                            //
-                            //                parsedURL = string(decoded)         
+                            }   
                             break;
                         case 6:
                             using (var response = Connection.GetAsync(link.Url).Result)
@@ -266,13 +226,6 @@ namespace Meow_Api
                                     convertURLstatus = true;
                                 }
                             }
-
-                            //                    r, _:= regexp.Compile("\\?r=(.*)")
-                            //       
-                            //            if b64String := r.FindStringSubmatch(url); len(b64String) > 1 {
-                            //                        decoded, _:= b64.StdEncoding.DecodeString(b64String[1])
-                            //
-                            //                parsedURL = string(decoded)
                             break;
                         case 7:
                             using (var response = Connection.GetAsync(link.Url).Result)
@@ -313,6 +266,33 @@ namespace Meow_Api
                                 convertURLstatus = true;
                             }
 
+                            break;
+                        case 8:
+                            var requester = new HttpRequester();
+                            requester.Headers["X-Requested-With"] = "XMLHttpRequest";
+                            var configuration = Configuration.Default
+                                .WithDefaultLoader(_ => _.IsResourceLoadingEnabled = true, new[] {requester})
+                                .WithCookies();
+                            var context = BrowsingContext.New(configuration);
+                            using (var response = context.OpenAsync(link.Url).Result)
+                            {
+                                var json = "";
+                                using (var content = response.QuerySelector<IHtmlFormElement>("form").SubmitAsync().Result)
+                                {
+                                    using (var jsonResult = content.QuerySelector<IHtmlFormElement>("form")
+                                        .SubmitAsync().Result)
+                                    {
+                                        json = jsonResult.Body.TextContent;
+                                    }
+
+                                }
+                                var regexMatch = Regex.Matches(json, "\\\"(.+?)\\\"");
+                                var realLink = regexMatch[regexMatch.Count - 1].ToString().Replace("\"", "")
+                                    .Replace(@"\", "");
+
+                                parsedURL = realLink;
+                                convertURLstatus = true;
+                            }
                             break;
                         default:
                             ConvertErr = true;
@@ -362,6 +342,7 @@ namespace Meow_Api
                     new List<string>(new[] {"wptech"}), // tested = ? : NONE
                     new List<string>(new[] {"lindung"}), // tested = lindung : ALL
                     new List<string>(new[] {"94lauin"}), // tested = 94lauin : ALL
+                    new List<string>(new[] {"safelinku"}), // tested = safelinku : ALL
                 }
             );
             foreach (var adsGroup in fansubAds)
